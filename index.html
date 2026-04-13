@@ -137,6 +137,21 @@ select option{background:var(--surface2)}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:500;background:rgba(79,156,249,.15);color:var(--accent);border:1px solid rgba(79,156,249,.25)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:white;padding:12px 20px;border-radius:30px;font-size:13px;font-weight:500;transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:999;white-space:nowrap}
 .toast.show{transform:translateX(-50%) translateY(0)}
+/* ── PAYOUT CARDS ── */
+.payout-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px}
+.payout-header{display:flex;align-items:center;gap:12px}
+.payout-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.payout-name{font-size:15px;font-weight:600}
+.payout-role{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:1px}
+.payout-rows{display:flex;flex-direction:column;gap:5px}
+.payout-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.payout-row-label{color:var(--text3);font-family:var(--mono)}
+.payout-row-val{font-family:var(--mono);font-weight:500;color:var(--text2)}
+.payout-divider{height:1px;background:var(--border);margin:2px 0}
+.payout-total{display:flex;justify-content:space-between;align-items:center;padding-top:2px}
+.payout-total-label{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;font-family:var(--mono)}
+.payout-total-val{font-size:20px;font-weight:700;font-family:var(--mono)}
+.capital-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:20px;padding:3px 10px;font-size:11px;font-family:var(--mono);color:var(--amber)}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
@@ -375,6 +390,8 @@ select option{background:var(--surface2)}
       <div class="metric-grid" id="dash-global"></div>
       <span class="section-title">por persona</span>
       <div style="display:flex;flex-direction:column;gap:8px" id="dash-persons"></div>
+      <span class="section-title">distribución mensual</span>
+      <div style="display:flex;flex-direction:column;gap:10px" id="dash-payouts"></div>
       <span class="section-title">ciclos cerrados</span>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
         <table class="ops-table" id="dash-cycles">
@@ -797,6 +814,77 @@ function renderDashboard(all) {
       <div class="person-gain" style="color:${gan>0?'var(--green)':gan<0?'var(--red)':'var(--text2)'}">$${fmt(gan)}</div>
     </div>`;
   }).join('');
+
+  // ── DISTRIBUCIÓN MENSUAL ──
+  const GILBERTO_CAPITAL = 400; // capital inicial de Gilberto en $
+  const gilbertoGan = all.filter(o=>o.persona==='Gilberto').reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
+  const franyelizGan = all.filter(o=>o.persona==='Franyeliz').reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
+
+  // Pagos según acuerdo
+  const gilbertoPago   = gilbertoGan  * 0.20;
+  const franyelizPago  = (gilbertoGan * 0.10) + (franyelizGan * 0.50);
+  const diegoPago      = (gilbertoGan * 0.70) + (franyelizGan * 0.50);
+
+  const payCards = [
+    {
+      name: 'Gilberto',
+      color: '#34d399',
+      role: 'Operador principal',
+      capital: GILBERTO_CAPITAL,
+      rows: [
+        { label: 'Capital inicial',        val: '$'+fmt(GILBERTO_CAPITAL), highlight: 'amber' },
+        { label: 'Ganancias generadas',    val: '$'+fmt(gilbertoGan) },
+        { label: 'Su % (20% de sus ops)',  val: '20%' },
+      ],
+      pago: gilbertoPago,
+    },
+    {
+      name: 'Franyeliz',
+      color: '#a78bfa',
+      role: 'Operadora',
+      capital: null,
+      rows: [
+        { label: 'Ganancias propias',              val: '$'+fmt(franyelizGan) },
+        { label: '50% de sus ops',                 val: '$'+fmt(franyelizGan*0.50) },
+        { label: '10% de ops de Gilberto',         val: '$'+fmt(gilbertoGan*0.10) },
+      ],
+      pago: franyelizPago,
+    },
+    {
+      name: 'Diego',
+      color: '#60a5fa',
+      role: 'Socio principal',
+      capital: null,
+      rows: [
+        { label: '70% de ops de Gilberto',  val: '$'+fmt(gilbertoGan*0.70) },
+        { label: '50% de ops de Franyeliz', val: '$'+fmt(franyelizGan*0.50) },
+      ],
+      pago: diegoPago,
+    },
+  ];
+
+  document.getElementById('dash-payouts').innerHTML = payCards.map(c => `
+    <div class="payout-card">
+      <div class="payout-header">
+        <div class="payout-avatar" style="background:${c.color}22;color:${c.color}">${c.name.slice(0,2).toUpperCase()}</div>
+        <div>
+          <div class="payout-name">${c.name}</div>
+          <div class="payout-role">${c.role}</div>
+        </div>
+        ${c.capital != null ? `<div style="margin-left:auto"><span class="capital-badge">Capital $${fmt(c.capital)}</span></div>` : ''}
+      </div>
+      <div class="payout-rows">
+        ${c.rows.map(r=>`<div class="payout-row">
+          <span class="payout-row-label">${r.label}</span>
+          <span class="payout-row-val">${r.val}</span>
+        </div>`).join('')}
+      </div>
+      <div class="payout-divider"></div>
+      <div class="payout-total">
+        <span class="payout-total-label">A cobrar este mes</span>
+        <span class="payout-total-val" style="color:${c.pago>0?'var(--green)':c.pago<0?'var(--red)':'var(--text2)'}">$${fmt(c.pago)}</span>
+      </div>
+    </div>`).join('');
 
   const tbody1=document.querySelector('#dash-cycles tbody');
   const cicSort=[...ciclos].sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,10);
