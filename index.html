@@ -155,9 +155,64 @@ select option{background:var(--surface2)}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+/* ── LOGIN ── */
+.login-overlay{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-box{width:100%;max-width:360px;display:flex;flex-direction:column;gap:18px}
+.login-logo{display:flex;justify-content:center}
+.login-logo-icon{width:48px;height:48px;background:var(--accent2);border-radius:14px;display:flex;align-items:center;justify-content:center}
+.login-logo-icon svg{width:24px;height:24px;color:white}
+.login-title{font-size:20px;font-weight:600;text-align:center}
+.login-sub{font-size:13px;color:var(--text3);text-align:center;margin-top:-10px}
+.login-field{display:flex;flex-direction:column;gap:6px}
+.login-field label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)}
+.login-field input{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:15px;padding:12px 14px;outline:none;transition:border-color .15s;width:100%}
+.login-field input:focus{border-color:var(--accent2)}
+.login-err{font-size:12px;color:var(--red);font-family:var(--mono);text-align:center;display:none;min-height:16px}
+.login-btn{background:var(--accent2);color:white;border:none;border-radius:var(--r);padding:14px;font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;transition:background .15s;width:100%}
+.login-btn:hover{background:var(--accent)}
+.login-btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-logout{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text3);cursor:pointer;padding:6px 8px;display:flex;align-items:center;transition:all .12s}
+.btn-logout:hover{border-color:rgba(239,68,68,.5);color:var(--red)}
+.persona-badge{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 12px}
+.role-chip{padding:2px 8px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:500;border:1px solid}
+.role-chip.admin{background:rgba(245,158,11,.1);color:var(--amber);border-color:rgba(245,158,11,.3)}
+.role-chip.worker{background:rgba(79,156,249,.1);color:var(--accent);border-color:rgba(79,156,249,.3)}
+.user-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;gap:12px}
+.user-avatar{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0;color:var(--text2)}
+.user-info{flex:1;min-width:0}
+.user-email{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-meta{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
+
+<!-- ══ LOGIN ══ -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+        </svg>
+      </div>
+    </div>
+    <div class="login-title">Cambios Trading</div>
+    <div class="login-sub">Ingresa tus credenciales para continuar</div>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="usuario@email.com" autocomplete="email"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-pw').focus()">
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="login-pw" placeholder="••••••••" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="login-err" id="login-err"></div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
+  </div>
+</div>
 
 <!-- ══ MODAL DE CONTRASEÑA ══ -->
 <div class="modal-overlay" id="pw-modal">
@@ -187,12 +242,19 @@ select option{background:var(--surface2)}
     </div>
   </div>
   <div class="header-right">
+    <span class="role-chip" id="role-chip"></span>
     <select class="persona" id="persona-select" onchange="onPersonaChange()">
       <option value="Franyeliz">Franyeliz</option>
       <option value="Gilberto">Gilberto</option>
       <option value="Diego">Diego</option>
     </select>
+    <div class="persona-badge" id="persona-badge" style="display:none"></div>
     <div class="op-counter">ops: <span id="op-count">0</span></div>
+    <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -200,7 +262,8 @@ select option{background:var(--surface2)}
   <div class="tabs">
     <button class="tab active" onclick="switchTab('form')">Nueva op.</button>
     <button class="tab" onclick="switchTab('list')">Lista</button>
-    <button class="tab" onclick="switchTab('dash')">Dashboard</button>
+    <button class="tab" id="tab-dash-btn" onclick="switchTab('dash')">Dashboard</button>
+    <button class="tab" id="tab-users-btn" onclick="switchTab('users')">Usuarios</button>
   </div>
 
   <!-- ══ FORM ══ -->
@@ -222,7 +285,6 @@ select option{background:var(--surface2)}
       <div class="pills" id="pills-plat">
         <button class="pill" data-val="Binance"         onclick="selectPill(this,'plat')">Binance</button>
         <button class="pill" data-val="Venezuela/Banco" onclick="selectPill(this,'plat')">Venezuela/Banco</button>
-        <button class="pill" data-val="Zinli"           onclick="selectPill(this,'plat')">Zinli</button>
       </div>
     </div>
 
@@ -247,76 +309,6 @@ select option{background:var(--surface2)}
         </div>
         <span class="calc-hint">calculado · toca para editar manualmente</span>
       </div>
-    </div>
-
-    <div class="conditional" id="cond-banco">
-      <div class="divider">compra $ en banco</div>
-      <div class="field">
-        <label>Tasa banco (Bs / $)</label>
-        <div class="input-group"><span class="input-prefix">Bs/$</span>
-          <input type="number" id="tasa-banco" placeholder="0" step="0.01" oninput="calcBanco()">
-        </div>
-      </div>
-      <div class="field">
-        <label>Dólares comprados</label>
-        <div class="input-group"><span class="input-prefix">$</span>
-          <input type="number" id="compra-usd" placeholder="0.00" step="0.01" oninput="calcBanco()">
-        </div>
-      </div>
-      <div class="field">
-        <label>Total Bs utilizado</label>
-        <div class="input-group auto-calc"><span class="input-prefix">Bs</span>
-          <input type="number" id="total-bs-banco" placeholder="— auto —" step="0.01" readonly>
-        </div>
-        <span class="calc-hint">tasa × dólares</span>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-label">¿Hubo comisión del banco?</span>
-        <button type="button" class="toggle" id="toggle-comision" onclick="toggleField('comision')"></button>
-      </div>
-      <div class="conditional" id="cond-comision">
-        <div class="field">
-          <label>Comisión banco ($)</label>
-          <div class="input-group"><span class="input-prefix">$</span>
-            <input type="number" id="comision-banco" placeholder="0.00" step="0.01">
-          </div>
-        </div>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-label">¿Usaste Zinli?</span>
-        <button type="button" class="toggle" id="toggle-zinli" onclick="toggleField('zinli')"></button>
-      </div>
-      <div class="conditional" id="cond-zinli">
-        <div class="field">
-          <label>Monto Zinli ($)</label>
-          <div class="input-group"><span class="input-prefix">$</span>
-            <input type="number" id="compra-zinli" placeholder="0.00" step="0.01" oninput="calcZinli()">
-          </div>
-        </div>
-        <div class="field">
-          <label>Comisión Zinli (%)</label>
-          <div class="input-group"><span class="input-prefix">%</span>
-            <input type="number" id="comision-zinli" placeholder="6" step="0.01" oninput="calcZinli()">
-          </div>
-        </div>
-        <div class="field">
-          <label>Comisión Zinli ($)</label>
-          <div class="input-group auto-calc"><span class="input-prefix">$</span>
-            <input type="number" id="comision-zinli-usd" placeholder="— auto —" step="0.01" readonly>
-          </div>
-          <span class="calc-hint">monto × %</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="conditional" id="cond-compra-usdt">
-      <div class="divider">compra usdt</div>
-      <div class="field">
-        <label>USDT comprados</label>
-        <div class="input-group"><span class="input-prefix">USDT</span>
-          <input type="number" id="compra-usdt-monto" placeholder="0.00" step="0.01">
-        </div>
-      </div>
       <div class="toggle-row">
         <span class="toggle-label">¿Cierra un ciclo?</span>
         <button type="button" class="toggle" id="toggle-ciclo" onclick="toggleField('ciclo')"></button>
@@ -337,6 +329,64 @@ select option{background:var(--surface2)}
       </div>
     </div>
 
+    <div class="conditional" id="cond-banco">
+      <div class="divider">compra $ en banco</div>
+      <div class="field">
+        <label>Tasa banco (Bs / $)</label>
+        <div class="input-group"><span class="input-prefix">Bs/$</span>
+          <input type="number" id="tasa-banco" placeholder="0" step="0.01" oninput="calcBanco()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Total Bs utilizado</label>
+        <div class="input-group"><span class="input-prefix">Bs</span>
+          <input type="number" id="total-bs-banco" placeholder="0.00" step="0.01" oninput="calcBanco()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Dólares comprados</label>
+        <div class="input-group auto-calc"><span class="input-prefix">$</span>
+          <input type="number" id="compra-usd" placeholder="— auto —" step="0.01" readonly>
+        </div>
+        <span class="calc-hint">calculado · Bs ÷ tasa</span>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">¿Hubo comisión del banco?</span>
+        <button type="button" class="toggle" id="toggle-comision" onclick="toggleField('comision')"></button>
+      </div>
+      <div class="conditional" id="cond-comision">
+        <div class="field">
+          <label>Comisión banco ($)</label>
+          <div class="input-group"><span class="input-prefix">$</span>
+            <input type="number" id="comision-banco" placeholder="0.00" step="0.01">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="conditional" id="cond-compra-usdt">
+      <div class="divider">compra usdt</div>
+      <div class="field">
+        <label>USD enviados</label>
+        <div class="input-group"><span class="input-prefix">$</span>
+          <input type="number" id="usd-gastados-usdt" placeholder="0.00" step="0.01" oninput="calcComisionUsdt()">
+        </div>
+      </div>
+      <div class="field">
+        <label>USDT recibidos</label>
+        <div class="input-group"><span class="input-prefix">USDT</span>
+          <input type="number" id="compra-usdt-monto" placeholder="0.00" step="0.01" oninput="calcComisionUsdt()">
+        </div>
+      </div>
+      <div class="field">
+        <label>Comisión exchange</label>
+        <div class="input-group auto-calc"><span class="input-prefix">%</span>
+          <input type="number" id="comision-exchange-pct" placeholder="— auto —" step="0.0001" readonly>
+        </div>
+        <span class="calc-hint">calculado · (USD − USDT) ÷ USD × 100</span>
+      </div>
+    </div>
+
     <div class="field">
       <label>Notas (opcional)</label>
       <textarea id="notas" placeholder="Ej: Ciclo inicial, Bancamiga directa..."></textarea>
@@ -353,39 +403,16 @@ select option{background:var(--surface2)}
       <div class="empty-state"><div class="icon">📋</div>Sin operaciones aún</div>
     </div>
     <div class="btn-row">
-      <button class="btn btn-danger" onclick="askDeleteAll()">Borrar todo</button>
+      <button class="btn btn-danger" id="btn-delete-all" onclick="askDeleteAll()">Borrar todo</button>
       <button class="btn btn-secondary" onclick="switchTab('form')">+ Nueva</button>
     </div>
   </div>
 
   <!-- ══ DASHBOARD ══ -->
   <div class="section" id="tab-dash">
-    <div id="dash-lock">
-      <div class="lock-screen">
-        <div class="lock-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:16px;font-weight:500;margin-bottom:6px">Dashboard protegido</div>
-          <div style="font-size:13px;color:var(--text3)">Ingresa la contraseña para ver el resumen</div>
-        </div>
-        <div class="lock-input-row">
-          <input type="password" id="dash-pw" placeholder="Contraseña..."
-            onkeydown="if(event.key==='Enter')unlockDash()">
-          <button onclick="unlockDash()">Entrar</button>
-        </div>
-        <div id="dash-pw-error" style="color:var(--red);font-size:12px;font-family:var(--mono);display:none">
-          Contraseña incorrecta
-        </div>
-      </div>
-    </div>
-
-    <div id="dash-content" style="display:none;flex-direction:column;gap:18px">
+    <div id="dash-content" style="display:flex;flex-direction:column;gap:18px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span class="section-title">resumen general</span>
-        <span class="dash-logout" onclick="lockDash()">cerrar sesión</span>
       </div>
       <div class="metric-grid" id="dash-global"></div>
       <span class="section-title">por persona</span>
@@ -412,15 +439,137 @@ select option{background:var(--surface2)}
       </button>
     </div>
   </div>
+
+  <!-- ══ USUARIOS ══ -->
+  <div class="section" id="tab-users">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span class="section-title">gestión de usuarios</span>
+      <button class="btn btn-secondary" style="flex:none;padding:8px 14px;font-size:12px" onclick="openUserModal()">
+        + Agregar
+      </button>
+    </div>
+    <div id="users-list" style="display:flex;flex-direction:column;gap:8px">
+      <div class="empty-state"><div class="icon">👤</div>Cargando usuarios...</div>
+    </div>
+  </div>
 </main>
+
+<!-- ══ MODAL USUARIO ══ -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title" id="user-modal-title">Agregar usuario</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" class="modal-pw" id="um-email" placeholder="usuario@email.com" style="font-family:var(--sans)">
+    </div>
+    <div class="field" id="um-pw-field">
+      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Contraseña</label>
+      <input type="password" class="modal-pw" id="um-password" placeholder="Mínimo 6 caracteres" style="font-family:var(--sans)">
+    </div>
+    <div class="field">
+      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Rol</label>
+      <select class="modal-pw" id="um-role" onchange="togglePersonaField()" style="font-family:var(--sans)">
+        <option value="worker">Trabajador</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="field" id="um-persona-field">
+      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Persona asociada</label>
+      <select class="modal-pw" id="um-persona" style="font-family:var(--sans)">
+        <option value="Gilberto">Gilberto</option>
+        <option value="Franyeliz">Franyeliz</option>
+        <option value="Diego">Diego</option>
+      </select>
+    </div>
+    <div class="modal-err" id="um-err"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeUserModal()">Cancelar</button>
+      <button class="modal-confirm" id="um-confirm-btn" onclick="saveUser()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 // ════════════════════════════════════════════
 //  CONFIG
 // ════════════════════════════════════════════
-const SUPABASE_URL = 'https://dyarkwuzcamyeuakkoyg.supabase.co';       // ej: https://abcdefgh.supabase.co
-const SUPABASE_KEY = 'sb_publishable_1r5ItMzLqLQFdPgurXTgUw__nNaqBfK';   // empieza con eyJ...
+const SUPABASE_URL = 'https://dyarkwuzcamyeuakkoyg.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_1r5ItMzLqLQFdPgurXTgUw__nNaqBfK';
+
+// ════════════════════════════════════════════
+//  AUTH — Supabase client
+// ════════════════════════════════════════════
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let authToken      = null;
+let currentRole    = null;  // 'admin' | 'worker'
+let currentPersona = null;  // 'Gilberto' | 'Franyeliz' | 'Diego'
+
+function applyRoleUI() {
+  const isAdmin = currentRole === 'admin';
+
+  // Chip de rol en header
+  const chip = document.getElementById('role-chip');
+  chip.textContent = isAdmin ? 'admin' : 'trabajador';
+  chip.className = 'role-chip ' + (isAdmin ? 'admin' : 'worker');
+
+  // Selector de persona vs badge fijo
+  document.getElementById('persona-select').style.display = isAdmin ? '' : 'none';
+  const badge = document.getElementById('persona-badge');
+  badge.style.display = isAdmin ? 'none' : '';
+  if (!isAdmin && currentPersona) {
+    badge.textContent = currentPersona;
+    document.getElementById('persona-select').value = currentPersona;
+  }
+
+  // Tab Dashboard y Usuarios solo para admin
+  document.getElementById('tab-dash-btn').style.display   = isAdmin ? '' : 'none';
+  document.getElementById('tab-users-btn').style.display  = isAdmin ? '' : 'none';
+
+  // Botón "Borrar todo" solo para admin
+  document.getElementById('btn-delete-all').style.display = isAdmin ? '' : 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-pw').value;
+  const errEl = document.getElementById('login-err');
+  const btn   = document.getElementById('login-btn');
+  if (!email || !pw) { errEl.textContent='Completa todos los campos'; errEl.style.display='block'; return; }
+  btn.textContent='...'; btn.disabled=true; errEl.style.display='none';
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    if (error) throw error;
+  } catch(e) {
+    errEl.textContent = e.message === 'Invalid login credentials' ? 'Credenciales incorrectas' : e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent='Ingresar'; btn.disabled=false;
+  }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+}
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (session) {
+    authToken = session.access_token;
+    const meta     = session.user.user_metadata || {};
+    currentRole    = meta.role    || 'worker';
+    currentPersona = meta.persona || null;
+    document.getElementById('login-overlay').style.display = 'none';
+    cachedPw = null;
+    applyRoleUI();
+    loadOps();
+    if (currentRole === 'admin') getPassword().catch(()=>{});
+  } else {
+    authToken = null; cachedPw = null;
+    currentRole = null; currentPersona = null;
+    document.getElementById('login-overlay').style.display = 'flex';
+  }
+});
 
 // ════════════════════════════════════════════
 //  API — fetch directo a REST, sin SDK
@@ -431,7 +580,7 @@ async function sbReq(method, table, query, body) {
     method,
     headers: {
       'apikey':        SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Authorization': 'Bearer ' + (authToken || SUPABASE_KEY),
       'Content-Type':  'application/json',
       'Accept':        'application/json',
     },
@@ -517,7 +666,7 @@ document.getElementById('pw-modal').addEventListener('click', function(e) {
 // ════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════
-const S = { tipo:null, plat:null, toggles:{comision:false,zinli:false,ciclo:false}, ops:[] };
+const S = { tipo:null, plat:null, toggles:{comision:false,ciclo:false}, ops:[] };
 const today = new Date().toISOString().split('T')[0];
 document.getElementById('fecha').value = today;
 
@@ -525,12 +674,14 @@ document.getElementById('fecha').value = today;
 //  TABS
 // ════════════════════════════════════════════
 function switchTab(tab) {
+  if ((tab === 'dash' || tab === 'users') && currentRole !== 'admin') return;
   document.querySelectorAll('.tab').forEach((t,i) =>
-    t.classList.toggle('active', ['form','list','dash'][i] === tab));
+    t.classList.toggle('active', ['form','list','dash','users'][i] === tab));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
-  if (tab === 'list') loadOps().then(renderList);
-  if (tab === 'dash' && document.getElementById('dash-content').style.display !== 'none') loadDashboard();
+  if (tab === 'list')  loadOps().then(renderList);
+  if (tab === 'dash')  loadDashboard();
+  if (tab === 'users') loadUsers();
 }
 
 // ════════════════════════════════════════════
@@ -562,17 +713,17 @@ function calcVenta() {
   const el = document.getElementById('total-bs-venta');
   if (el.readOnly && m > 0 && t > 0) el.value = (m * t).toFixed(2);
 }
+function calcComisionUsdt() {
+  const usd  = parseFloat(document.getElementById('usd-gastados-usdt').value);
+  const usdt = parseFloat(document.getElementById('compra-usdt-monto').value);
+  const el   = document.getElementById('comision-exchange-pct');
+  el.value = (usd > 0 && usdt > 0) ? ((usd - usdt) / usd * 100).toFixed(4) : '';
+}
 function calcBanco() {
   const t = parseFloat(document.getElementById('tasa-banco').value);
-  const u = parseFloat(document.getElementById('compra-usd').value);
-  const el = document.getElementById('total-bs-banco');
-  el.value = (t > 0 && u > 0) ? (t * u).toFixed(2) : '';
-}
-function calcZinli() {
-  const m = parseFloat(document.getElementById('compra-zinli').value);
-  const p = parseFloat(document.getElementById('comision-zinli').value);
-  const el = document.getElementById('comision-zinli-usd');
-  el.value = (m > 0 && p > 0) ? (m * p / 100).toFixed(2) : '';
+  const b = parseFloat(document.getElementById('total-bs-banco').value);
+  const el = document.getElementById('compra-usd');
+  el.value = (t > 0 && b > 0) ? (b / t).toFixed(2) : '';
 }
 
 // ════════════════════════════════════════════
@@ -614,19 +765,19 @@ async function addOperation() {
     if (!m||!t) return showToast('Ingresa monto y tasa','error');
     row.monto_usdt=m; row.tasa_bs_usdt=t;
     row.total_bs=gn('total-bs-venta')??parseFloat((m*t).toFixed(2));
+    if (S.toggles.ciclo) { row.ganancia_ciclo_pct=gn('ganancia-ciclo'); row.ganancia_ciclo_usd=gn('ganancia-ciclo-usd'); }
   }
   if (S.tipo==='Compra $ en Banco') {
-    const t=gn('tasa-banco'), u=gn('compra-usd');
-    if (!t||!u) return showToast('Ingresa tasa y dólares','error');
-    row.tasa_banco=t; row.compra_usd=u; row.total_bs=gn('total-bs-banco');
+    const t=gn('tasa-banco'), b=gn('total-bs-banco');
+    if (!t||!b) return showToast('Ingresa tasa y total Bs','error');
+    row.tasa_banco=t; row.total_bs=b; row.compra_usd=gn('compra-usd')??parseFloat((b/t).toFixed(2));
     row.comision_banco=S.toggles.comision?(gn('comision-banco')??0):0;
-    if (S.toggles.zinli) { row.compra_zinli=gn('compra-zinli'); row.comision_zinli_pct=gn('comision-zinli'); }
   }
   if (S.tipo==='Compra USDT') {
-    const m=gn('compra-usdt-monto');
-    if (!m) return showToast('Ingresa los USDT comprados','error');
-    row.compra_usdt=m;
-    if (S.toggles.ciclo) { row.ganancia_ciclo_pct=gn('ganancia-ciclo'); row.ganancia_ciclo_usd=gn('ganancia-ciclo-usd'); }
+    const usd=gn('usd-gastados-usdt'), usdt=gn('compra-usdt-monto');
+    if (!usd||!usdt) return showToast('Ingresa USD enviados y USDT recibidos','error');
+    row.usd_gastados_usdt=usd; row.compra_usdt=usdt;
+    row.comision_exchange_pct=gn('comision-exchange-pct');
   }
 
   const btn=document.getElementById('btn-add');
@@ -646,16 +797,16 @@ async function addOperation() {
 // ════════════════════════════════════════════
 function resetForm() {
   document.querySelectorAll('.pill').forEach(p=>p.classList.remove('selected'));
-  S.tipo=null; S.plat=null; S.toggles={comision:false,zinli:false,ciclo:false};
-  ['comision','zinli','ciclo'].forEach(k=>{
+  S.tipo=null; S.plat=null; S.toggles={comision:false,ciclo:false};
+  ['comision','ciclo'].forEach(k=>{
     document.getElementById('toggle-'+k).classList.remove('on');
     document.getElementById('cond-'+k).classList.remove('show');
   });
   ['cond-venta','cond-banco','cond-compra-usdt'].forEach(id=>
     document.getElementById(id).classList.remove('show'));
-  ['monto-usdt','tasa-bs-usdt','total-bs-venta','tasa-banco','compra-usd','total-bs-banco',
-   'comision-banco','compra-zinli','comision-zinli','comision-zinli-usd',
-   'compra-usdt-monto','ganancia-ciclo','ganancia-ciclo-usd','notas']
+  ['monto-usdt','tasa-bs-usdt','total-bs-venta','ganancia-ciclo','ganancia-ciclo-usd',
+   'tasa-banco','total-bs-banco','compra-usd','comision-banco',
+   'usd-gastados-usdt','compra-usdt-monto','comision-exchange-pct','notas']
     .forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   const tbv=document.getElementById('total-bs-venta');
   tbv.readOnly=true;
@@ -684,7 +835,7 @@ function renderList() {
         <div class="op-card-sub">${sub}</div>
       </div>
       <div class="op-actions">
-        <button class="op-btn del" onclick="askDelete('${op.id}')">eliminar</button>
+        ${currentRole==='admin'?`<button class="op-btn del" onclick="askDelete('${op.id}')">eliminar</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -717,43 +868,6 @@ function askDeleteAll() {
       showToast('Todo borrado');
     }
   );
-}
-
-// ════════════════════════════════════════════
-//  DASHBOARD — AUTH
-// ════════════════════════════════════════════
-async function unlockDash() {
-  const pw     = document.getElementById('dash-pw').value;
-  const errEl  = document.getElementById('dash-pw-error');
-  const btn    = document.querySelector('#dash-lock button');
-  if (!pw) { errEl.textContent='Ingresa la contraseña'; errEl.style.display='block'; return; }
-  btn.textContent='...'; btn.disabled=true;
-  try {
-    const ok = await checkPassword(pw);
-    if (ok) {
-      document.getElementById('dash-lock').style.display='none';
-      const c=document.getElementById('dash-content');
-      c.style.display='flex'; c.style.flexDirection='column'; c.style.gap='18px';
-      errEl.style.display='none';
-      loadDashboard();
-    } else {
-      errEl.textContent='Contraseña incorrecta';
-      errEl.style.display='block';
-      document.getElementById('dash-pw').value='';
-    }
-  } catch(e) {
-    errEl.textContent=e.message;
-    errEl.style.display='block';
-  } finally {
-    btn.textContent='Entrar'; btn.disabled=false;
-  }
-}
-
-function lockDash() {
-  document.getElementById('dash-lock').style.display='block';
-  document.getElementById('dash-content').style.display='none';
-  document.getElementById('dash-pw').value='';
-  document.getElementById('dash-pw-error').style.display='none';
 }
 
 // ════════════════════════════════════════════
@@ -919,11 +1033,128 @@ function showToast(msg,type) {
 }
 
 // ════════════════════════════════════════════
-//  INIT
+//  GESTIÓN DE USUARIOS
 // ════════════════════════════════════════════
-loadOps();
-// Pre-cargar contraseña en caché silenciosamente
-getPassword().catch(()=>{});
+let editingUserId = null;
+
+async function usersReq(method, body) {
+  const res = await fetch('/.netlify/functions/users', {
+    method,
+    headers: {
+      'Authorization': 'Bearer ' + authToken,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error desconocido');
+  return data;
+}
+
+async function loadUsers() {
+  const el = document.getElementById('users-list');
+  el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div>Cargando...</div>';
+  try {
+    const users = await usersReq('GET');
+    if (!users.length) {
+      el.innerHTML = '<div class="empty-state"><div class="icon">👤</div>Sin usuarios aún</div>';
+      return;
+    }
+    el.innerHTML = users.map(u => {
+      const initials = u.email.slice(0,2).toUpperCase();
+      const personaStr = u.persona ? ` · ${u.persona}` : '';
+      return `<div class="user-card">
+        <div class="user-avatar">${initials}</div>
+        <div class="user-info">
+          <div class="user-email">${u.email}</div>
+          <div class="user-meta">
+            <span class="role-chip ${u.role}">${u.role === 'admin' ? 'admin' : 'trabajador'}</span>${personaStr}
+          </div>
+        </div>
+        <div class="op-actions">
+          <button class="op-btn" onclick='openUserModal(${JSON.stringify(u)})'>editar</button>
+          <button class="op-btn del" onclick="deleteUser('${u.id}','${u.email}')">eliminar</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function openUserModal(user) {
+  editingUserId = user?.id || null;
+  document.getElementById('user-modal-title').textContent = user ? 'Editar usuario' : 'Agregar usuario';
+  document.getElementById('um-email').value    = user?.email    || '';
+  document.getElementById('um-email').disabled = !!user;
+  document.getElementById('um-role').value     = user?.role     || 'worker';
+  document.getElementById('um-persona').value  = user?.persona  || 'Gilberto';
+  document.getElementById('um-password').value = '';
+  document.getElementById('um-pw-field').querySelector('label').textContent =
+    user ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña';
+  document.getElementById('um-err').style.display = 'none';
+  togglePersonaField();
+  document.getElementById('user-modal').classList.add('open');
+}
+
+function closeUserModal() {
+  document.getElementById('user-modal').classList.remove('open');
+  editingUserId = null;
+}
+
+function togglePersonaField() {
+  const isWorker = document.getElementById('um-role').value === 'worker';
+  document.getElementById('um-persona-field').style.display = isWorker ? '' : 'none';
+}
+
+async function saveUser() {
+  const email    = document.getElementById('um-email').value.trim();
+  const password = document.getElementById('um-password').value;
+  const role     = document.getElementById('um-role').value;
+  const persona  = role === 'worker' ? document.getElementById('um-persona').value : null;
+  const errEl    = document.getElementById('um-err');
+  const btn      = document.getElementById('um-confirm-btn');
+  errEl.style.display = 'none';
+  if (!editingUserId && (!email || !password)) {
+    errEl.textContent = 'Email y contraseña son requeridos'; errEl.style.display = 'block'; return;
+  }
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    if (editingUserId) {
+      const body = { userId: editingUserId, role, persona };
+      if (password) body.password = password;
+      await usersReq('PATCH', body);
+    } else {
+      await usersReq('POST', { email, password, role, persona });
+    }
+    closeUserModal();
+    loadUsers();
+    showToast(editingUserId ? 'Usuario actualizado' : 'Usuario creado');
+  } catch(e) {
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Guardar'; btn.disabled = false;
+  }
+}
+
+function deleteUser(userId, email) {
+  openModal(
+    'Eliminar usuario',
+    `Se eliminará la cuenta de ${email}. Esta acción no se puede deshacer.`,
+    'Eliminar', true,
+    async () => {
+      await usersReq('DELETE', { userId });
+      loadUsers();
+      showToast('Usuario eliminado');
+    }
+  );
+}
+
+document.getElementById('user-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeUserModal();
+});
+
+// ════════════════════════════════════════════
+//  INIT — sesión gestionada por onAuthStateChange
+// ════════════════════════════════════════════
 </script>
 </body>
 </html>
