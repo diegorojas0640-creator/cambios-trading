@@ -243,11 +243,7 @@ select option{background:var(--surface2)}
   </div>
   <div class="header-right">
     <span class="role-chip" id="role-chip"></span>
-    <select class="persona" id="persona-select" onchange="onPersonaChange()">
-      <option value="Franyeliz">Franyeliz</option>
-      <option value="Gilberto">Gilberto</option>
-      <option value="Diego">Diego</option>
-    </select>
+    <select class="persona" id="persona-select" onchange="onPersonaChange()"></select>
     <div class="persona-badge" id="persona-badge" style="display:none"></div>
     <div class="op-counter">ops: <span id="op-count">0</span></div>
     <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">
@@ -442,14 +438,31 @@ select option{background:var(--surface2)}
 
   <!-- ══ USUARIOS ══ -->
   <div class="section" id="tab-users">
+
+    <span class="section-title">personas</span>
+    <div id="personas-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="new-persona-name" placeholder="Nombre"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:14px;padding:10px 12px;outline:none"
+        onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"
+        onkeydown="if(event.key==='Enter')addPersona()">
+      <input type="number" id="new-persona-pct" placeholder="%" min="0" max="100"
+        style="width:68px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 10px;outline:none;text-align:center"
+        onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"
+        onkeydown="if(event.key==='Enter')addPersona()">
+      <button class="btn btn-secondary" style="flex:none;padding:10px 14px;font-size:13px" onclick="addPersona()">+ Agregar</button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
+
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <span class="section-title">gestión de usuarios</span>
+      <span class="section-title">usuarios</span>
       <button class="btn btn-secondary" style="flex:none;padding:8px 14px;font-size:12px" onclick="openUserModal()">
         + Agregar
       </button>
     </div>
     <div id="users-list" style="display:flex;flex-direction:column;gap:8px">
-      <div class="empty-state"><div class="icon">👤</div>Cargando usuarios...</div>
+      <div class="empty-state"><div class="icon">👤</div>Cargando...</div>
     </div>
   </div>
 </main>
@@ -475,11 +488,7 @@ select option{background:var(--surface2)}
     </div>
     <div class="field" id="um-persona-field">
       <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Persona asociada</label>
-      <select class="modal-pw" id="um-persona" style="font-family:var(--sans)">
-        <option value="Gilberto">Gilberto</option>
-        <option value="Franyeliz">Franyeliz</option>
-        <option value="Diego">Diego</option>
-      </select>
+      <select class="modal-pw" id="um-persona" style="font-family:var(--sans)"></select>
     </div>
     <div class="modal-err" id="um-err"></div>
     <div class="modal-btns">
@@ -562,7 +571,7 @@ sb.auth.onAuthStateChange((event, session) => {
     document.getElementById('login-overlay').style.display = 'none';
     cachedPw = null;
     applyRoleUI();
-    loadOps();
+    loadPersonas().then(()=>loadOps());
     if (currentRole === 'admin') getPassword().catch(()=>{});
   } else {
     authToken = null; cachedPw = null;
@@ -592,9 +601,91 @@ async function sbReq(method, table, query, body) {
 }
 
 // ════════════════════════════════════════════
-//  CONTRASEÑA — caché en sesión
+//  PERSONAS — dinámicas desde config
 // ════════════════════════════════════════════
-let cachedPw = null;
+let personas  = []; // [{name, pct}]
+let cachedPw  = null;
+const PALETTE = ['#34d399','#a78bfa','#60a5fa','#f59e0b','#ef4444','#ec4899','#14b8a6'];
+
+async function loadPersonas() {
+  try {
+    const rows = await sbReq('GET','config','key=eq.personas&select=value');
+    personas = rows?.length ? JSON.parse(rows[0].value) : [];
+  } catch { personas = []; }
+  populatePersonaSelects();
+  if (currentRole === 'admin') renderPersonasList();
+}
+
+async function savePersonas() {
+  const val = JSON.stringify(personas);
+  const url = SUPABASE_URL + '/rest/v1/config';
+  await fetch(url, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + (authToken || SUPABASE_KEY),
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({ key: 'personas', value: val })
+  });
+}
+
+function populatePersonaSelects() {
+  const opts = personas.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+  document.getElementById('persona-select').innerHTML = opts;
+  document.getElementById('um-persona').innerHTML     = opts;
+  // Si es trabajador, restaurar su persona fija
+  if (currentRole === 'worker' && currentPersona) {
+    document.getElementById('persona-select').value = currentPersona;
+    document.getElementById('persona-badge').textContent = currentPersona;
+  }
+}
+
+function renderPersonasList() {
+  const el = document.getElementById('personas-list');
+  if (!el) return;
+  if (!personas.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);font-family:var(--mono);padding:6px 0">Sin personas configuradas</div>';
+    return;
+  }
+  el.innerHTML = personas.map((p,i) => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${PALETTE[i%PALETTE.length]};flex-shrink:0"></div>
+      <span style="flex:1;font-size:14px;font-weight:500">${p.name}</span>
+      <span style="font-size:12px;font-family:var(--mono);color:var(--accent)">${p.pct}%</span>
+      <button class="op-btn del" onclick="removePersona('${p.name}')">eliminar</button>
+    </div>`).join('');
+}
+
+async function addPersona() {
+  const nameEl = document.getElementById('new-persona-name');
+  const pctEl  = document.getElementById('new-persona-pct');
+  const name   = nameEl.value.trim();
+  const pct    = parseFloat(pctEl.value) || 0;
+  if (!name) return showToast('Ingresa un nombre','error');
+  if (personas.some(p=>p.name.toLowerCase()===name.toLowerCase()))
+    return showToast('Esa persona ya existe','error');
+  personas.push({ name, pct });
+  try {
+    await savePersonas();
+    nameEl.value = ''; pctEl.value = '';
+    populatePersonaSelects();
+    renderPersonasList();
+    showToast('Persona agregada');
+  } catch(e) { personas.pop(); showToast('Error: '+e.message,'error'); }
+}
+
+async function removePersona(name) {
+  const prev = [...personas];
+  personas = personas.filter(p=>p.name!==name);
+  try {
+    await savePersonas();
+    populatePersonaSelects();
+    renderPersonasList();
+    showToast('Persona eliminada');
+  } catch(e) { personas=prev; showToast('Error: '+e.message,'error'); }
+}
 
 async function getPassword() {
   if (cachedPw) return cachedPw;
@@ -881,8 +972,7 @@ async function loadDashboard() {
 }
 
 function renderDashboard(all) {
-  const personas=['Franyeliz','Gilberto','Diego'];
-  const colors  =['#a78bfa','#34d399','#60a5fa'];
+  const colors = PALETTE;
   const totalOps    = all.length;
   const ciclos      = all.filter(o=>o.ganancia_ciclo_pct!=null);
   const totalGanUsd = all.reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
@@ -907,98 +997,60 @@ function renderDashboard(all) {
     </div>
     <div class="metric-card">
       <div class="metric-label">personas activas</div>
-      <div class="metric-value neu">${personas.filter(p=>all.some(o=>o.persona===p)).length} / ${personas.length}</div>
+      <div class="metric-value neu">${personas.filter(p=>all.some(o=>o.persona===p.name)).length} / ${personas.length}</div>
       <div class="metric-sub">registradas</div>
     </div>`;
 
-  const maxGan=Math.max(...personas.map(p=>all.filter(o=>o.persona===p).reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0)),1);
+  const names  = personas.map(p=>p.name);
+  const maxGan = Math.max(...names.map(n=>all.filter(o=>o.persona===n).reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0)),1);
   document.getElementById('dash-persons').innerHTML=personas.map((p,i)=>{
-    const ops=all.filter(o=>o.persona===p);
+    const ops=all.filter(o=>o.persona===p.name);
     const cic=ops.filter(o=>o.ganancia_ciclo_pct!=null);
     const gan=ops.reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
     const avg=cic.length?cic.reduce((s,o)=>s+(o.ganancia_ciclo_pct||0),0)/cic.length:0;
     const bar=Math.min(100,Math.max(0,(gan/maxGan)*100));
+    const col=colors[i%colors.length];
     return `<div class="person-row">
-      <div class="person-avatar" style="background:${colors[i]}22;color:${colors[i]}">${p.slice(0,2).toUpperCase()}</div>
+      <div class="person-avatar" style="background:${col}22;color:${col}">${p.name.slice(0,2).toUpperCase()}</div>
       <div class="person-info">
-        <div class="person-name">${p}</div>
+        <div class="person-name">${p.name}</div>
         <div class="person-stats">${ops.length} ops · ${cic.length} ciclos · prom ${fmt(avg,1)}%</div>
-        <div class="bar-wrap"><div class="bar-fill" style="width:${bar}%;background:${colors[i]}"></div></div>
+        <div class="bar-wrap"><div class="bar-fill" style="width:${bar}%;background:${col}"></div></div>
       </div>
       <div class="person-gain" style="color:${gan>0?'var(--green)':gan<0?'var(--red)':'var(--text2)'}">$${fmt(gan)}</div>
     </div>`;
   }).join('');
 
-  // ── DISTRIBUCIÓN MENSUAL ──
-  const GILBERTO_CAPITAL = 400; // capital inicial de Gilberto en $
-  const gilbertoGan = all.filter(o=>o.persona==='Gilberto').reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
-  const franyelizGan = all.filter(o=>o.persona==='Franyeliz').reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
-
-  // Pagos según acuerdo
-  const gilbertoPago   = gilbertoGan  * 0.20;
-  const franyelizPago  = (gilbertoGan * 0.10) + (franyelizGan * 0.50);
-  const diegoPago      = (gilbertoGan * 0.70) + (franyelizGan * 0.50);
-
-  const payCards = [
-    {
-      name: 'Gilberto',
-      color: '#34d399',
-      role: 'Operador principal',
-      capital: GILBERTO_CAPITAL,
-      rows: [
-        { label: 'Capital inicial',        val: '$'+fmt(GILBERTO_CAPITAL), highlight: 'amber' },
-        { label: 'Ganancias generadas',    val: '$'+fmt(gilbertoGan) },
-        { label: 'Su % (20% de sus ops)',  val: '20%' },
-      ],
-      pago: gilbertoPago,
-    },
-    {
-      name: 'Franyeliz',
-      color: '#a78bfa',
-      role: 'Operadora',
-      capital: null,
-      rows: [
-        { label: 'Ganancias propias',              val: '$'+fmt(franyelizGan) },
-        { label: '50% de sus ops',                 val: '$'+fmt(franyelizGan*0.50) },
-        { label: '10% de ops de Gilberto',         val: '$'+fmt(gilbertoGan*0.10) },
-      ],
-      pago: franyelizPago,
-    },
-    {
-      name: 'Diego',
-      color: '#60a5fa',
-      role: 'Socio principal',
-      capital: null,
-      rows: [
-        { label: '70% de ops de Gilberto',  val: '$'+fmt(gilbertoGan*0.70) },
-        { label: '50% de ops de Franyeliz', val: '$'+fmt(franyelizGan*0.50) },
-      ],
-      pago: diegoPago,
-    },
-  ];
-
-  document.getElementById('dash-payouts').innerHTML = payCards.map(c => `
-    <div class="payout-card">
+  // ── DISTRIBUCIÓN MENSUAL (dinámica por persona configurada) ──
+  document.getElementById('dash-payouts').innerHTML = personas.length ? personas.map((p,i) => {
+    const gan  = all.filter(o=>o.persona===p.name).reduce((s,o)=>s+(o.ganancia_ciclo_usd||0),0);
+    const pago = gan * (p.pct / 100);
+    const col  = colors[i%colors.length];
+    return `<div class="payout-card">
       <div class="payout-header">
-        <div class="payout-avatar" style="background:${c.color}22;color:${c.color}">${c.name.slice(0,2).toUpperCase()}</div>
+        <div class="payout-avatar" style="background:${col}22;color:${col}">${p.name.slice(0,2).toUpperCase()}</div>
         <div>
-          <div class="payout-name">${c.name}</div>
-          <div class="payout-role">${c.role}</div>
+          <div class="payout-name">${p.name}</div>
+          <div class="payout-role" style="color:var(--text3);font-size:11px;font-family:var(--mono)">${p.pct}% de sus ganancias</div>
         </div>
-        ${c.capital != null ? `<div style="margin-left:auto"><span class="capital-badge">Capital $${fmt(c.capital)}</span></div>` : ''}
       </div>
       <div class="payout-rows">
-        ${c.rows.map(r=>`<div class="payout-row">
-          <span class="payout-row-label">${r.label}</span>
-          <span class="payout-row-val">${r.val}</span>
-        </div>`).join('')}
+        <div class="payout-row">
+          <span class="payout-row-label">Ganancias generadas</span>
+          <span class="payout-row-val">$${fmt(gan)}</span>
+        </div>
+        <div class="payout-row">
+          <span class="payout-row-label">Porcentaje acordado</span>
+          <span class="payout-row-val">${p.pct}%</span>
+        </div>
       </div>
       <div class="payout-divider"></div>
       <div class="payout-total">
         <span class="payout-total-label">A cobrar este mes</span>
-        <span class="payout-total-val" style="color:${c.pago>0?'var(--green)':c.pago<0?'var(--red)':'var(--text2)'}">$${fmt(c.pago)}</span>
+        <span class="payout-total-val" style="color:${pago>0?'var(--green)':pago<0?'var(--red)':'var(--text2)'}">$${fmt(pago)}</span>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--text3);font-family:var(--mono);padding:8px 0">Configura personas en el tab Usuarios</div>';
 
   const tbody1=document.querySelector('#dash-cycles tbody');
   const cicSort=[...ciclos].sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,10);
