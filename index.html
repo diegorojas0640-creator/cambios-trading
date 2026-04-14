@@ -438,23 +438,6 @@ select option{background:var(--surface2)}
 
   <!-- ══ USUARIOS ══ -->
   <div class="section" id="tab-users">
-
-    <span class="section-title">personas</span>
-    <div id="personas-list" style="display:flex;flex-direction:column;gap:6px"></div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" id="new-persona-name" placeholder="Nombre"
-        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--sans);font-size:14px;padding:10px 12px;outline:none"
-        onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"
-        onkeydown="if(event.key==='Enter')addPersona()">
-      <input type="number" id="new-persona-pct" placeholder="%" min="0" max="100"
-        style="width:68px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 10px;outline:none;text-align:center"
-        onfocus="this.style.borderColor='var(--accent2)'" onblur="this.style.borderColor='var(--border)'"
-        onkeydown="if(event.key==='Enter')addPersona()">
-      <button class="btn btn-secondary" style="flex:none;padding:10px 14px;font-size:13px" onclick="addPersona()">+ Agregar</button>
-    </div>
-
-    <div style="height:1px;background:var(--border);margin:4px 0"></div>
-
     <div style="display:flex;justify-content:space-between;align-items:center">
       <span class="section-title">usuarios</span>
       <button class="btn btn-secondary" style="flex:none;padding:8px 14px;font-size:12px" onclick="openUserModal()">
@@ -481,14 +464,16 @@ select option{background:var(--surface2)}
     </div>
     <div class="field">
       <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Rol</label>
-      <select class="modal-pw" id="um-role" onchange="togglePersonaField()" style="font-family:var(--sans)">
+      <select class="modal-pw" id="um-role" onchange="toggleWorkerFields()" style="font-family:var(--sans)">
         <option value="worker">Trabajador</option>
         <option value="admin">Admin</option>
       </select>
     </div>
-    <div class="field" id="um-persona-field">
-      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Persona asociada</label>
-      <select class="modal-pw" id="um-persona" style="font-family:var(--sans)"></select>
+    <div class="field" id="um-worker-fields">
+      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)">Nombre visible</label>
+      <input type="text" class="modal-pw" id="um-persona" placeholder="Ej: Carlos" style="font-family:var(--sans)">
+      <label style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono);margin-top:10px;display:block">% de pago sobre sus ganancias</label>
+      <input type="number" class="modal-pw" id="um-pct" placeholder="Ej: 20" min="0" max="100" style="font-family:var(--mono)">
     </div>
     <div class="modal-err" id="um-err"></div>
     <div class="modal-btns">
@@ -601,90 +586,30 @@ async function sbReq(method, table, query, body) {
 }
 
 // ════════════════════════════════════════════
-//  PERSONAS — dinámicas desde config
+//  PERSONAS — derivadas de los usuarios worker
 // ════════════════════════════════════════════
-let personas  = []; // [{name, pct}]
+let personas  = []; // [{name, pct}]  — poblado desde usuarios workers
 let cachedPw  = null;
 const PALETTE = ['#34d399','#a78bfa','#60a5fa','#f59e0b','#ef4444','#ec4899','#14b8a6'];
 
 async function loadPersonas() {
+  if (currentRole !== 'admin') return;
   try {
-    const rows = await sbReq('GET','config','key=eq.personas&select=value');
-    personas = rows?.length ? JSON.parse(rows[0].value) : [];
+    const users = await usersReq('GET');
+    personas = users
+      .filter(u => u.role === 'worker' && u.persona)
+      .map(u => ({ name: u.persona, pct: u.pct ?? 0 }));
   } catch { personas = []; }
   populatePersonaSelects();
-  if (currentRole === 'admin') renderPersonasList();
-}
-
-async function savePersonas() {
-  const val = JSON.stringify(personas);
-  const url = SUPABASE_URL + '/rest/v1/config';
-  await fetch(url, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + (authToken || SUPABASE_KEY),
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({ key: 'personas', value: val })
-  });
 }
 
 function populatePersonaSelects() {
   const opts = personas.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
   document.getElementById('persona-select').innerHTML = opts;
-  document.getElementById('um-persona').innerHTML     = opts;
-  // Si es trabajador, restaurar su persona fija
   if (currentRole === 'worker' && currentPersona) {
     document.getElementById('persona-select').value = currentPersona;
     document.getElementById('persona-badge').textContent = currentPersona;
   }
-}
-
-function renderPersonasList() {
-  const el = document.getElementById('personas-list');
-  if (!el) return;
-  if (!personas.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--text3);font-family:var(--mono);padding:6px 0">Sin personas configuradas</div>';
-    return;
-  }
-  el.innerHTML = personas.map((p,i) => `
-    <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px">
-      <div style="width:10px;height:10px;border-radius:50%;background:${PALETTE[i%PALETTE.length]};flex-shrink:0"></div>
-      <span style="flex:1;font-size:14px;font-weight:500">${p.name}</span>
-      <span style="font-size:12px;font-family:var(--mono);color:var(--accent)">${p.pct}%</span>
-      <button class="op-btn del" onclick="removePersona('${p.name}')">eliminar</button>
-    </div>`).join('');
-}
-
-async function addPersona() {
-  const nameEl = document.getElementById('new-persona-name');
-  const pctEl  = document.getElementById('new-persona-pct');
-  const name   = nameEl.value.trim();
-  const pct    = parseFloat(pctEl.value) || 0;
-  if (!name) return showToast('Ingresa un nombre','error');
-  if (personas.some(p=>p.name.toLowerCase()===name.toLowerCase()))
-    return showToast('Esa persona ya existe','error');
-  personas.push({ name, pct });
-  try {
-    await savePersonas();
-    nameEl.value = ''; pctEl.value = '';
-    populatePersonaSelects();
-    renderPersonasList();
-    showToast('Persona agregada');
-  } catch(e) { personas.pop(); showToast('Error: '+e.message,'error'); }
-}
-
-async function removePersona(name) {
-  const prev = [...personas];
-  personas = personas.filter(p=>p.name!==name);
-  try {
-    await savePersonas();
-    populatePersonaSelects();
-    renderPersonasList();
-    showToast('Persona eliminada');
-  } catch(e) { personas=prev; showToast('Error: '+e.message,'error'); }
 }
 
 async function getPassword() {
@@ -1114,7 +1039,7 @@ async function loadUsers() {
     }
     el.innerHTML = users.map(u => {
       const initials = u.email.slice(0,2).toUpperCase();
-      const personaStr = u.persona ? ` · ${u.persona}` : '';
+      const personaStr = u.persona ? ` · ${u.persona}${u.pct != null ? ' · '+u.pct+'%' : ''}` : '';
       return `<div class="user-card">
         <div class="user-avatar">${initials}</div>
         <div class="user-info">
@@ -1135,15 +1060,16 @@ async function loadUsers() {
 function openUserModal(user) {
   editingUserId = user?.id || null;
   document.getElementById('user-modal-title').textContent = user ? 'Editar usuario' : 'Agregar usuario';
-  document.getElementById('um-email').value    = user?.email    || '';
+  document.getElementById('um-email').value    = user?.email   || '';
   document.getElementById('um-email').disabled = !!user;
-  document.getElementById('um-role').value     = user?.role     || 'worker';
-  document.getElementById('um-persona').value  = user?.persona  || 'Gilberto';
+  document.getElementById('um-role').value     = user?.role    || 'worker';
+  document.getElementById('um-persona').value  = user?.persona || '';
+  document.getElementById('um-pct').value      = user?.pct     ?? '';
   document.getElementById('um-password').value = '';
   document.getElementById('um-pw-field').querySelector('label').textContent =
     user ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña';
   document.getElementById('um-err').style.display = 'none';
-  togglePersonaField();
+  toggleWorkerFields();
   document.getElementById('user-modal').classList.add('open');
 }
 
@@ -1152,33 +1078,38 @@ function closeUserModal() {
   editingUserId = null;
 }
 
-function togglePersonaField() {
+function toggleWorkerFields() {
   const isWorker = document.getElementById('um-role').value === 'worker';
-  document.getElementById('um-persona-field').style.display = isWorker ? '' : 'none';
+  document.getElementById('um-worker-fields').style.display = isWorker ? '' : 'none';
 }
 
 async function saveUser() {
   const email    = document.getElementById('um-email').value.trim();
   const password = document.getElementById('um-password').value;
   const role     = document.getElementById('um-role').value;
-  const persona  = role === 'worker' ? document.getElementById('um-persona').value : null;
+  const persona  = role === 'worker' ? document.getElementById('um-persona').value.trim() : null;
+  const pct      = role === 'worker' ? (parseFloat(document.getElementById('um-pct').value) || 0) : null;
   const errEl    = document.getElementById('um-err');
   const btn      = document.getElementById('um-confirm-btn');
   errEl.style.display = 'none';
   if (!editingUserId && (!email || !password)) {
     errEl.textContent = 'Email y contraseña son requeridos'; errEl.style.display = 'block'; return;
   }
+  if (role === 'worker' && !persona) {
+    errEl.textContent = 'El nombre visible es requerido para trabajadores'; errEl.style.display = 'block'; return;
+  }
   btn.textContent = '...'; btn.disabled = true;
   try {
     if (editingUserId) {
-      const body = { userId: editingUserId, role, persona };
+      const body = { userId: editingUserId, role, persona, pct };
       if (password) body.password = password;
       await usersReq('PATCH', body);
     } else {
-      await usersReq('POST', { email, password, role, persona });
+      await usersReq('POST', { email, password, role, persona, pct });
     }
     closeUserModal();
-    loadUsers();
+    await loadUsers();
+    await loadPersonas();
     showToast(editingUserId ? 'Usuario actualizado' : 'Usuario creado');
   } catch(e) {
     errEl.textContent = e.message; errEl.style.display = 'block';

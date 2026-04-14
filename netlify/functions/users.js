@@ -39,18 +39,19 @@ exports.handler = async (event) => {
     const res  = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=100`, { headers: adminHeaders });
     const data = await res.json();
     const users = (data.users || []).map(u => ({
-      id:       u.id,
-      email:    u.email,
-      role:     u.user_metadata?.role    || 'worker',
-      persona:  u.user_metadata?.persona || null,
-      created:  u.created_at,
+      id:      u.id,
+      email:   u.email,
+      role:    u.user_metadata?.role    || 'worker',
+      persona: u.user_metadata?.persona || null,
+      pct:     u.user_metadata?.pct     ?? null,
+      created: u.created_at,
     }));
     return { statusCode: 200, headers, body: JSON.stringify(users) };
   }
 
   // ── POST: crear usuario ─────────────────────────────────────────────────────
   if (method === 'POST') {
-    const { email, password, role, persona } = JSON.parse(event.body || '{}');
+    const { email, password, role, persona, pct } = JSON.parse(event.body || '{}');
     if (!email || !password || !role) return {
       statusCode: 400, headers, body: JSON.stringify({ error: 'email, password y role son requeridos' })
     };
@@ -58,7 +59,7 @@ exports.handler = async (event) => {
       method: 'POST', headers: adminHeaders,
       body: JSON.stringify({
         email, password,
-        user_metadata: { role, ...(persona ? { persona } : {}) },
+        user_metadata: { role, ...(persona ? { persona } : {}), ...(pct != null ? { pct } : {}) },
         email_confirm: true,
       })
     });
@@ -69,9 +70,9 @@ exports.handler = async (event) => {
 
   // ── PATCH: editar metadata de usuario ──────────────────────────────────────
   if (method === 'PATCH') {
-    const { userId, role, persona, password } = JSON.parse(event.body || '{}');
+    const { userId, role, persona, pct, password } = JSON.parse(event.body || '{}');
     if (!userId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'userId requerido' }) };
-    const payload = { user_metadata: { role, ...(persona ? { persona } : {}) } };
+    const payload = { user_metadata: { role, ...(persona ? { persona } : {}), ...(pct != null ? { pct } : {}) } };
     if (password) payload.password = password;
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT', headers: adminHeaders,
